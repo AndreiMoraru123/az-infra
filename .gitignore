@@ -63,5 +63,8 @@ data/
 outputs/
 artifacts/
 
+# PyTorch checkpoints
+*.pt
+
 # Jupyter Notebooks
 .ipynb_checkpoints
