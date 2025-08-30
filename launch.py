@@ -1,6 +1,7 @@
 import os
 
-from azure.ai.ml import MLClient, PyTorchDistribution, command
+from azure.ai.ml import Input, MLClient, Output, PyTorchDistribution, command
+from azure.ai.ml.dsl import pipeline
 from azure.identity import DefaultAzureCredential
 from dotenv import load_dotenv
 
@@ -21,15 +22,44 @@ ml_client = MLClient(
 )
 
 
-job = command(
+train_command = command(
+    name="train",
     code="./",
-    command="python train.py",
+    command="python train.py --model_output ${{outputs.model_output}}",
     environment="azureml://registries/azureml/environments/acpt-pytorch-2.2-cuda12.1/versions/40",
     compute=COMPUTE_CLUSTER_NAME,
-    experiment_name="toy-mnist-cpu",
     distribution=PyTorchDistribution(process_count_per_instance=1),
     instance_count=3,
+    outputs={"model_output": Output(type="uri_folder")},
 )
 
-returned_job = ml_client.jobs.create_or_update(job)
-ml_client.jobs.stream(returned_job.name)
+eval_command = command(
+    name="eval",
+    code="./",
+    compute=COMPUTE_CLUSTER_NAME,
+    command="python evaluate.py --model_path ${{inputs.model_input}}/best_model.pt",
+    environment="azureml://registries/azureml/environments/acpt-pytorch-2.2-cuda12.1/versions/40",
+    inputs={"model_input": Input(type="uri_folder")},
+    outputs={"eval_results": Output(type="uri_folder")},
+)
+
+
+@pipeline(name="mnist_train_eval", experiment_name="toy-mnist-cpu")
+def create_pipeline():
+    """Create the training and evaluation pipeline."""
+    train_job = train_command()
+    eval_job = eval_command(model_input=train_job.outputs.model_output)
+    return {
+        "final_model": train_job.outputs.model_output,
+        "evaluation_results": eval_job.outputs.eval_results,
+    }
+
+
+if __name__ == "__main__":
+    pipeline_job = create_pipeline()
+    returned_job = ml_client.jobs.create_or_update(pipeline_job)
+
+    print(f"Pipeline submitted: {returned_job.name}")
+    print(f"View in portal: https://ml.azure.com/runs/{returned_job.name}")
+
+    ml_client.jobs.stream(returned_job.name)

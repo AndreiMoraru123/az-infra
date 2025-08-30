@@ -1,4 +1,6 @@
+import argparse
 import logging
+import os
 from typing import Any
 
 import torch
@@ -19,6 +21,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 NUM_EPOCHS = 10
+
+
+def parse_args():
+    p = argparse.ArgumentParser()
+    p.add_argument("--model_output", type=str, default="outputs")
+    return p.parse_args()
 
 
 def setup_distributed():
@@ -53,6 +61,9 @@ def validate_model(
 
 
 def train():
+    args = parse_args()
+    os.makedirs(args.model_output, exist_ok=True)
+
     setup_distributed()
 
     rank = dist.get_rank()
@@ -132,7 +143,7 @@ def train():
                         "train_loss": avg_loss,
                         "val_accuracy": val_accuracy,
                     },
-                    "outputs/best_model.pt",
+                    os.path.join(args.model_output, "best_model.pt"),
                 )
                 logger.info(f"  New best model saved! Accuracy: {val_accuracy:.2f}%")
 
