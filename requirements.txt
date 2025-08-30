@@ -1,0 +1,8 @@
+# Azure ML SDK
+azure-ai-ml==1.28.1
+azure-identity==1.24.0
+azure-mgmt-resource==24.0.0
+azure-mgmt-network==29.0.0
+azure-mgmt-compute==36.0.0
+
+python-dotenv==1.1.1
