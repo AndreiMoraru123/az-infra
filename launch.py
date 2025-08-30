@@ -27,8 +27,8 @@ job = command(
     environment="azureml://registries/azureml/environments/acpt-pytorch-2.2-cuda12.1/versions/40",
     compute=COMPUTE_CLUSTER_NAME,
     experiment_name="toy-mnist-cpu",
-    distribution=PyTorchDistribution(process_cont_per_instance=1),
-    instance_count=2,
+    distribution=PyTorchDistribution(process_count_per_instance=1),
+    instance_count=3,
 )
 
 returned_job = ml_client.jobs.create_or_update(job)

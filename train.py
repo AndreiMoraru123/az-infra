@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 import torch
 import torch.distributed as dist
@@ -30,6 +31,27 @@ def cleanup_distributed():
     dist.destroy_process_group()
 
 
+def validate_model(
+    model: Net, val_loader: torch.utils.data.DataLoader[Any], device: str = "cpu"
+):
+    """Validate model - assumes val_loader is already created"""
+    model.eval()
+    correct = 0
+    total = 0
+
+    with torch.no_grad():
+        for images, labels in val_loader:
+            images, labels = images.to(device), labels.to(device)
+            outputs = model(images)
+            _, predicted = torch.max(outputs, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+
+    accuracy = 100 * correct / total
+    logger.info(f"Validation Accuracy: {accuracy:.2f}%")
+    return accuracy
+
+
 def train():
     setup_distributed()
 
@@ -56,6 +78,11 @@ def train():
         train_data, batch_size=32, sampler=sampler
     )
 
+    val_data = datasets.MNIST(
+        root="data", train=False, download=True, transform=transform
+    )
+    val_loader = torch.utils.data.DataLoader(val_data, batch_size=64, shuffle=False)
+
     model = Net().to(device)
     model = DDP(model)
 
@@ -65,6 +92,8 @@ def train():
     if rank == 0:
         logger.info("Starting distributed training...")
         logger.info(f"Training for {NUM_EPOCHS} epochs")
+
+    best_val_accuracy = 0
 
     for epoch in range(NUM_EPOCHS):
         sampler.set_epoch(epoch)
@@ -90,9 +119,22 @@ def train():
             avg_loss = total_loss / len(train_loader)
             logger.info(f"Epoch {epoch + 1}/{NUM_EPOCHS}, Average Loss: {avg_loss:.4f}")
 
-    if rank == 0:
-        torch.save(model.module.state_dict(), "toy_model.pt")
-        logger.info("Training complete. Model saved as toy_model.pt")
+            val_accuracy = validate_model(model, val_loader)
+            logger.info(f"  Val Accuracy: {val_accuracy:.2f}%")
+
+            if val_accuracy > best_val_accuracy:
+                best_val_accuracy = val_accuracy
+                torch.save(
+                    {
+                        "epoch": epoch,
+                        "model_state_dict": model.module.state_dict(),
+                        "optimizer_state_dict": optimizer.state_dict(),
+                        "train_loss": avg_loss,
+                        "val_accuracy": val_accuracy,
+                    },
+                    "outputs/best_model.pt",
+                )
+                logger.info(f"  New best model saved! Accuracy: {val_accuracy:.2f}%")
 
     cleanup_distributed()
 
