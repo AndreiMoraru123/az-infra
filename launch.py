@@ -37,10 +37,28 @@ eval_command = command(
     name="eval",
     code="./",
     compute=COMPUTE_CLUSTER_NAME,
-    command="python evaluate.py --model_path ${{inputs.model_input}}/best_model.pt",
+    command="python evaluate.py --model_path ${{inputs.model_input}}/best_model.pt --save_path ${{outputs.eval_results}}",
     environment="azureml://registries/azureml/environments/acpt-pytorch-2.2-cuda12.1/versions/40",
     inputs={"model_input": Input(type="uri_folder")},
     outputs={"eval_results": Output(type="uri_folder")},
+)
+
+publish_command = command(
+    name="publish",
+    code="./",
+    compute=COMPUTE_CLUSTER_NAME,
+    command=(
+        "python publish.py "
+        "--model_path ${{inputs.model_input}} "
+        "--eval_results ${{inputs.eval_input}} "
+        "--final_output ${{outputs.published_output}}"
+    ),
+    environment="azureml://registries/azureml/environments/acpt-pytorch-2.2-cuda12.1/versions/40",
+    inputs={
+        "model_input": Input(type="uri_folder"),
+        "eval_input": Input(type="uri_folder"),
+    },
+    outputs={"published_output": Output(type="uri_folder")},
 )
 
 
@@ -49,10 +67,11 @@ def create_pipeline():
     """Create the training and evaluation pipeline."""
     train_job = train_command()
     eval_job = eval_command(model_input=train_job.outputs.model_output)
-    return {
-        "final_model": train_job.outputs.model_output,
-        "evaluation_results": eval_job.outputs.eval_results,
-    }
+    publish_job = publish_command(
+        model_input=train_job.outputs.model_output,
+        eval_input=eval_job.outputs.eval_results,
+    )
+    return {"published_results": publish_job.outputs.published_output}
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 import argparse
 import logging
+import os
 
 import torch
 import torch.nn as nn
@@ -15,7 +16,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def evaluate(model_path: str):
+def evaluate():
+    args = parse_args()
+    os.makedirs(args.save_path, exist_ok=True)
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info(f"Using device: {device}")
 
@@ -27,10 +31,10 @@ def evaluate(model_path: str):
 
     model = Net().to(device)
 
-    if model_path.endswith(".pt") and "model_state_dict" in torch.load(
-        model_path, map_location=device
+    if args.model_path.endswith(".pt") and "model_state_dict" in torch.load(
+        args.model_path, map_location=device
     ):
-        checkpoint = torch.load(model_path, map_location=device)
+        checkpoint = torch.load(args.model_path, map_location=device)
         model.load_state_dict(checkpoint["model_state_dict"])
         logger.info(
             f"Loaded checkpoint from epoch {checkpoint.get('epoch', 'unknown')}"
@@ -40,9 +44,8 @@ def evaluate(model_path: str):
             f"  Validation accuracy: {checkpoint.get('val_accuracy', 'unknown'):.2f}%"
         )
     else:
-        # Loading simple state dict
-        model.load_state_dict(torch.load(model_path, map_location=device))
-        logger.info(f"Loaded model state dict from {model_path}")
+        model.load_state_dict(torch.load(args.model_path, map_location=device))
+        logger.info(f"Loaded model state dict from {args.model_path}")
 
     model.eval()
 
@@ -77,19 +80,27 @@ def evaluate(model_path: str):
         "total_samples": total,
     }
 
-    torch.save(results, "outputs/test_results.pt")
-    logger.info("Test results saved to outputs/test_results.pt")
+    torch.save(results, os.path.join(args.save_path, "test_results.pt"))
+    logger.info(f"Test results saved to {args.save_path}/test_results.pt")
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--model_path", type=str, required=True, help="Path to model checkpoint"
+        "--model_path",
+        type=str,
+        required=True,
+        help="Path to model checkpoint",
+    )
+    parser.add_argument(
+        "--save_path",
+        type=str,
+        required=True,
+        help="Path to saving the eval results",
     )
     args = parser.parse_args()
-    return args.model_path
+    return args
 
 
 if __name__ == "__main__":
-    model_path = parse_args()
-    evaluate(model_path)
+    evaluate()

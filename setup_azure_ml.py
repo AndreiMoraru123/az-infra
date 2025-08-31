@@ -78,7 +78,6 @@ def main():
     assert SUBSCRIPTION_ID, "subscription id must be provided"
     create_resource_group(credential, SUBSCRIPTION_ID, RESOURCE_GROUP_NAME, LOCATION)
 
-    # Initialize ML Client for workspace operations
     ml_client = MLClient(
         credential=credential,
         subscription_id=SUBSCRIPTION_ID,
